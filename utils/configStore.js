@@ -9,7 +9,7 @@ const CONFIG_GROUPS = [
         fields: [
             { key: "account_type", comment: "offline is the only option currently" },
             { key: "offline_accounts", comment: "number or comma-separated usernames" },
-            { key: "offline_password" },
+            { key: "offline_password", comment: "string, array, or username-keyed object" },
             { key: "offline_captcha_solver", comment: "manual, nopecha, tesseract" },
             { key: "offline_captcha_folder", comment: "folder to save captcha images" },
             { key: "join_delay", comment: "min 1.5 | max 10. prevents connection throb" },

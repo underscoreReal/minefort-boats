@@ -5,7 +5,7 @@ const { spawn } = require("child_process");
 
 const screen = blessed.screen({
     smartCSR: true,
-    title: "Mineflayer Bot Control",
+    title: "Minefort",
     dockBorders: true,
     fullUnicode: true
 });
@@ -128,6 +128,11 @@ const COMMANDS = [
         name: "!promote",
         description: "self promotion",
         action: promoteRepo
+    },
+    {
+        name: "!meow",
+        description: "Make the bots meow",
+        action: meow
     },
     {
         name: "!exit",
@@ -678,8 +683,104 @@ const selfpromoteMessages = [
 ]
 function promoteRepo() {
     for (const bot of bots) {
-        pushLog(bot, bot.chat)
         bot.chat(selfpromoteMessages[Math.floor(Math.random() * selfpromoteMessages.length)])
+    }
+}
+
+const meows = [
+    "meow",
+    "mew",
+    "mrrp",
+    "mrrrp",
+    "mrrp!",
+    "mrrwp",
+    "mrreow",
+    "mrraow",
+    "mrrow",
+    "mrroww",
+    "mraow",
+    "mraoww",
+    "mrow",
+    "mroww",
+    "mrowr",
+    "mreow",
+    "mreeow",
+    "mrrrow",
+    "mrrraow",
+    "mrrreow",
+    "mrrrwp",
+    "mrrroww",
+    "mrrrowr",
+    "mrrraw",
+    "mraw",
+    "mrawr",
+    "mrao",
+    "mrrt",
+    "mrrrt",
+    "mrrr",
+    "prrp",
+    "prrrp",
+    "prrr",
+    "prrrow",
+    "purrr",
+    "purr",
+    "purrrr",
+    "brrp",
+    "brrrp",
+    "nya",
+    "nya~",
+    "nyao",
+    "nyaow",
+    "nyaa",
+    "nyaaow",
+    "nyaoww",
+    "miep",
+    "miow",
+    "miaow",
+    "miao",
+    "miyaow",
+    "mrriaow",
+    "eow",
+    "reow",
+    "raow",
+    "rowr",
+    "rawr",
+    "mrrrr",
+    "mrrrrp",
+    "mrrrrrow",
+    "mrrrrreow",
+    "mrrraww",
+    "mrryaow",
+    "mrrmrr",
+    "mewp",
+    "mewrp",
+    "meeep",
+    "mewow",
+    "meeow",
+    "miaaaw",
+    "nyrrp",
+    "nyrrow",
+    "prrroww",
+    "prrreow",
+    "prraow",
+    "mrp",
+    "mrpp",
+    "mrp!",
+    "mrrrp!",
+    "mrrrrowww",
+    "mrawww",
+    "mreeeow",
+    "myaow",
+    "myaoww",
+    "myeow",
+    "mrryeow",
+    "rrmeow",
+    "rrmrrp",
+    "mrrrp?"
+];
+function meow() {
+    for (const bot of bots) {
+        bot.chat(meows[Math.floor(Math.random() * meows.length)])
     }
 }
 
@@ -818,6 +919,14 @@ function formatEditableValue(field, value) {
         return value.join(", ");
     }
 
+    if (field.key === "offline_password") {
+        if (typeof value === "string") {
+            return value;
+        }
+
+        return JSON.stringify(value);
+    }
+
     if (field.type === "array") {
         return value.join(", ");
     }
@@ -860,6 +969,28 @@ function parseFieldValue(field, rawInput) {
             .split(",")
             .map((entry) => entry.trim())
             .filter(Boolean);
+    }
+
+    if (field.key === "offline_password") {
+        if (value.startsWith("[") && value.endsWith("]")) {
+            const parsed = JSON.parse(value);
+            if (!Array.isArray(parsed)) {
+                throw new Error("Expected a JSON array.");
+            }
+            return parsed.map((entry) => String(entry));
+        }
+
+        if (value.startsWith("{") && value.endsWith("}")) {
+            const parsed = JSON.parse(value);
+            if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+                throw new Error("Expected a JSON object.");
+            }
+            return Object.fromEntries(
+                Object.entries(parsed).map(([key, entryValue]) => [String(key), String(entryValue)])
+            );
+        }
+
+        return value;
     }
 
     if (field.type === "string") {

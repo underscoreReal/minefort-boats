@@ -21,7 +21,6 @@ function removeBot(bot) {
 }
 
 function normalizeUsernames(usernames) {
-    // Handle numeric input - generate that many random usernames
     if (typeof usernames === "number" && usernames > 0) {
         const generatedUsernames = [];
         for (let i = 0; i < usernames; i++) {
@@ -66,12 +65,16 @@ async function createOfflineBot(username, options = {}, logFunc) {
         viewDistance: options.viewDistance || "tiny"
     });
 
-    // Allow graceful manual disconnects without triggering a reconnect cycle.
     bot.shouldReconnect = true;
+
+    const accountIndex = Array.isArray(config.offline_accounts)
+        ? config.offline_accounts.findIndex((account) => String(account || "").trim() === String(username || "").trim())
+        : 0;
 
     const authFlow = new OfflineCaptchaAuthFlow(bot, {
         config,
         username,
+        accountIndex: accountIndex >= 0 ? accountIndex : 0,
         password: config.offline_password,
         log: (scope, message) => logFunc('[' + scope + ' ' + username + ']', message),
         sendChat: (message) => bot.chat(message),
@@ -105,7 +108,6 @@ async function createOfflineBot(username, options = {}, logFunc) {
         }
     });
 
-    // Provide a promise that resolves when the initial auth state is known
     (function setupInitialAuthPromise() {
         let resolved = false;
         let resolveFn = null;
@@ -128,11 +130,11 @@ async function createOfflineBot(username, options = {}, logFunc) {
         }, timeoutMs);
 
         authFlow.on("sessionAuthed", () => resolveFn({ type: "authed" }));
+        authFlow.on("hubTransfer", () => resolveFn({ type: "authed" }));
         authFlow.on("captchaManualRequired", () => resolveFn({ type: "manual" }));
         authFlow.on("captchaVerified", () => resolveFn({ type: "authed" }));
     })();
 
-    // Relay solved/verified events to the global event bus so the connect loop can resume
     authFlow.on("captchaSolved", (payload) => {
         try {
             globalEvents.emit("manualCaptchaSolved", { username, imagePath: payload.imagePath, solution: payload.solution });
@@ -145,6 +147,14 @@ async function createOfflineBot(username, options = {}, logFunc) {
         try {
             globalEvents.emit("manualCaptchaSolved", { username });
         } catch (e) {}
+    });
+
+    authFlow.on("hubTransfer", () => {
+        try {
+            globalEvents.emit("manualCaptchaSolved", { username });
+        } catch (e) {
+            // ignore
+        }
     });
 
     authFlow.on("wrongPassword", () => {
@@ -181,7 +191,6 @@ async function createOfflineBot(username, options = {}, logFunc) {
             return;
         }
 
-        // Attempt to reconnect with a delay between rejoin_delay_min and rejoin_delay_max
         const minDelay = (config.rejoin_delay_min || 5) * 1000;
         const maxDelay = (config.rejoin_delay_max || 10) * 1000;
         const randomDelay = minDelay + Math.random() * (maxDelay - minDelay);
@@ -220,15 +229,21 @@ async function initconnectBots(usernames = config.offline_accounts, logFunction)
 
     logFunction('hi', 'world')
 
-    // Pause the join loop if a manual captcha is active
     let manualBlocked = false;
     let manualUnlock = null;
+    let currentUsername = null;
 
-    const onManual = () => {
+    const onManual = (payload) => {
+        if (!payload || payload.username !== currentUsername) {
+            return;
+        }
         manualBlocked = true;
     };
 
-    const onSolved = () => {
+    const onSolved = (payload) => {
+        if (!payload || payload.username !== currentUsername) {
+            return;
+        }
         manualBlocked = false;
         if (manualUnlock) {
             manualUnlock();
@@ -241,19 +256,32 @@ async function initconnectBots(usernames = config.offline_accounts, logFunction)
 
     try {
         for (const username of normalizedUsernames) {
+            currentUsername = username;
+            logFunction('info', `Starting bot ${username}...`);
+
             while (manualBlocked) {
+                logFunction('info', `Waiting for manual captcha to finish for ${username} before starting next bot.`);
                 await new Promise((res) => (manualUnlock = res));
             }
 
-            const bot = await createOfflineBot(username, {}, logFunction);
+            let bot = null;
 
-            // Wait for initial auth state: if the bot requires manual captcha, pause until it's solved
             try {
-                if (bot && bot.initialAuth) {
+                bot = await createOfflineBot(username, {}, logFunction);
+            } catch (error) {
+                logFunction('warn', `Failed to create bot ${username}: ${error.message}`);
+                continue;
+            }
+
+            if (bot && bot.initialAuth) {
+                logFunction('info', `Waiting for initial auth on ${username}...`);
+
+                try {
                     const authResult = await bot.initialAuth;
+                    logFunction('info', `Initial auth result for ${username}: ${String(authResult?.type)}`);
 
                     if (authResult && authResult.type === "manual") {
-                        // Wait until manualCaptchaSolved for this username
+                        logFunction('info', `Manual captcha required for ${username}. Waiting for solve...`);
                         await new Promise((resolve) => {
                             const onSolved = (payload) => {
                                 if (!payload) return;
@@ -266,9 +294,9 @@ async function initconnectBots(usernames = config.offline_accounts, logFunction)
                             globalEvents.on("manualCaptchaSolved", onSolved);
                         });
                     }
+                } catch (e) {
+                    logFunction('warn', `Error while waiting for initial auth on ${username}: ${e.message}`);
                 }
-            } catch (e) {
-                // ignore and continue
             }
 
             connectedBots.push(bot);
@@ -278,7 +306,6 @@ async function initconnectBots(usernames = config.offline_accounts, logFunction)
             }
         }
     } finally {
-        // Clean up listeners
         try {
             globalEvents.removeListener("manualCaptcha", onManual);
             globalEvents.removeListener("manualCaptchaSolved", onSolved);
@@ -297,7 +324,6 @@ async function disconnectBots() {
                 bot.authFlow.destroy();
             }
 
-            // Prevent reconnect after manual disconnect
             bot.shouldReconnect = false;
 
             if (typeof bot.quit === "function") {

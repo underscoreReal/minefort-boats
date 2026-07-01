@@ -23,7 +23,6 @@ async function tesseract_solve(imagePath) {
         path.dirname(imagePath),
         `ocr-${path.basename(imagePath, path.extname(imagePath))}`
     );
-    // Try multiple page segmentation modes and use a whitelist for alphanumeric chars
     const psmModes = [7, 8, 6, 11, 3];
     const whitelist = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 

@@ -5,6 +5,7 @@ const EventEmitter = require("events");
 const { config: sharedConfig } = require("../../config");
 const { solveTextCaptcha } = require("../captcha/solveTextCaptcha");
 const { OFFLINE_AUTH_REGEX } = require("./offlineAuthRegex");
+const { resolveOfflinePassword } = require("./passwordResolver");
 
 const FRAME_ENTITY_NAMES = new Set(["item_frame", "glow_item_frame"]);
 
@@ -27,7 +28,7 @@ function clearIntervalRef(intervalRef) {
 function noop() {}
 
 class OfflineCaptchaAuthFlow extends EventEmitter {
-    constructor(bot, options = {}) {1
+    constructor(bot, options = {}) {
         super();
 
         this.bot = bot || null;
@@ -47,7 +48,16 @@ class OfflineCaptchaAuthFlow extends EventEmitter {
             this.config.offline_accounts?.[0] ||
             "offline-user";
 
-        this.password = options.password || this.config.offline_password || "";
+        this.accountIndex =
+            typeof options.accountIndex === "number"
+                ? options.accountIndex
+                : this.getAccountIndex(this.username, this.config.offline_accounts);
+
+        this.password = resolveOfflinePassword({
+            username: this.username,
+            passwordConfig: options.password ?? this.config.offline_password,
+            accountIndex: this.accountIndex
+        });
         this.captchaMinFrames = options.captchaMinFrames ?? this.config.offline_captcha_min_frames ?? 9;
         this.captchaAssemblyDelayMs =
             options.captchaAssemblyDelayMs ?? this.config.offline_captcha_assembly_delay_ms ?? 500;
@@ -81,6 +91,17 @@ class OfflineCaptchaAuthFlow extends EventEmitter {
         this.lastAuthPromptType = null;
         this.lastAuthCommandType = null;
         this.invalidAuthAttemptCount = 0;
+        this.authPromptSuppressionUntil = 0;
+    }
+
+    getAccountIndex(username, accounts) {
+        if (!Array.isArray(accounts)) {
+            return 0;
+        }
+
+        const normalizedUsername = typeof username === "string" ? username.trim() : "";
+        const index = accounts.findIndex((account) => String(account || "").trim() === normalizedUsername);
+        return index >= 0 ? index : 0;
     }
 
     async attach(bot = this.bot) {
@@ -401,17 +422,33 @@ class OfflineCaptchaAuthFlow extends EventEmitter {
             return "unexpectedError";
         }
 
-        if (this.regex.lobbyKick.test(text)) {
-            this.markSessionUnauthed();
-            this.emit("lobbyKick", { message: text });
-            this.log("auth", "Bot was kicked from the server.");
-            return "lobbyKick";
-        }
+        //if (this.regex.lobbyKick.test(text)) {
+        //    this.markSessionUnauthed();
+        //    this.emit("lobbyKick", { message: text });
+        //    this.log("auth", "Bot was kicked from the server.");
+        //    return "lobbyKick";
+        //}
 
         if (this.regex.hubTransfer.test(text)) {
+            this.clearPostCaptchaAuthFallback();
+            this.stopCaptchaLookSweep();
+            this.awaitingCaptcha = false;
+            this.captchaImageSaved = false;
+            this.captchaMapsReceived = 0;
+            this.captchaSeenMapIds.clear();
+            this.lastAuthPromptType = null;
+            this.lastAuthCommandType = null;
+            this.invalidAuthAttemptCount = 0;
+            this.markSessionAuthed();
+            this.suppressAuthPromptsFor();
             this.emit("hubTransfer", { message: text });
             this.log("auth", "Server is transferring the bot to the hub.");
             return "hubTransfer";
+        }
+
+        if ((this.regex.registerPrompt.test(text) || this.regex.notRegistered.test(text) || this.regex.loginPrompt.test(text) || this.regex.alreadyRegistered.test(text)) && this.isAuthPromptSuppressed()) {
+            this.log("auth", "Ignoring auth prompt while the bot is settling after a transfer.");
+            return "authPromptSuppressed";
         }
 
         if (this.regex.registerPrompt.test(text) || this.regex.notRegistered.test(text)) {
@@ -465,6 +502,14 @@ class OfflineCaptchaAuthFlow extends EventEmitter {
 
         await this.sendAuthCommand(alternate);
         this.schedulePostCaptchaAuthFallback();
+    }
+
+    suppressAuthPromptsFor(durationMs = 10000) {
+        this.authPromptSuppressionUntil = Date.now() + durationMs;
+    }
+
+    isAuthPromptSuppressed() {
+        return Date.now() < this.authPromptSuppressionUntil;
     }
 
     markSessionAuthed() {
