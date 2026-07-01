@@ -677,9 +677,9 @@ async function disconnectBots() {
 }
 
 const selfpromoteMessages = [
-    "get this bot at: github․com/",
-    "stop skidding and use: github․com/",
-    "want to use something better? github․com/ is the best",
+    "get this bot at: github․com/underscoreReal/minefort-boats/",
+    "stop skidding and use: github․com/underscoreReal/minefort-boats/",
+    "want to use something better? github․com/underscoreReal/minefort-boats/ is the best",
 ]
 function promoteRepo() {
     for (const bot of bots) {
