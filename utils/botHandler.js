@@ -167,6 +167,15 @@ async function createOfflineBot(username, options = {}, logFunc) {
 
     bot.once("spawn", () => {
         logFunc('[' + "bot" + ' ' + username + ']', "Spawned.");
+
+        if (bot._client && typeof bot._client.write === "function") {
+            try {
+                bot._client.write('player_loaded', {});
+                logFunc('[' + "bot" + ' ' + username + ']', "Sent player_loaded packet.");
+            } catch (error) {
+                logFunc('[' + "bot" + ' ' + username + ']', `Failed to send player_loaded: ${error.message}`);
+            }
+        }
     });
 
     bot.on("message", async (jsonMessage) => {
