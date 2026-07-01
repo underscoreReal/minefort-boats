@@ -1,2 +1,2 @@
 # minefort-boats
- Minefort botting with mineflayer
+ Bots for minefort (Minecraft server)

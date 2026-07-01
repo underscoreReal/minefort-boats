@@ -1,0 +1,30 @@
+{
+  "name": "minefort-boats",
+  "version": "1.0.0",
+  "description": "Bots for minefort (Minecraft server)",
+  "homepage": "https://github.com/underscoreReal/minefort-boats#readme",
+  "bugs": {
+    "url": "https://github.com/underscoreReal/minefort-boats/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/underscoreReal/minefort-boats.git"
+  },
+  "license": "GPL-3.0-only",
+  "author": "underscoreReal",
+  "type": "commonjs",
+  "main": "main.js",
+  "scripts": {
+    "start": "node main.js"
+  },
+  "dependencies": {
+    "axios": "^1.18.1",
+    "blessed": "^0.1.81",
+    "flayercaptcha": "^1.0.6",
+    "mineflayer": "^4.37.1",
+    "node-addon-api": "^8.8.0",
+    "node-gyp": "^12.4.0",
+    "uuid": "^9.0.0",
+    "vec3": "^0.2.0"
+  }
+}
